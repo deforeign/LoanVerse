@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { send } from "process";
 import { sendEmail } from "@/helpers/mailer";
+import User from "@/models/userModel";
 
 export default function LoginPage() {
     const router = useRouter();
@@ -58,7 +59,10 @@ export default function LoginPage() {
       }
 
     }
-        
+    
+    const forgotPassword = async () => {
+        router.push('/forgotpassword');
+    };
   return (
     <div className="flex flex-col items-center justify-center min-h-screen p-4">
       <h1 className="text-4xl font-bold mb-8">
@@ -90,6 +94,10 @@ export default function LoginPage() {
         >
             {buttonDisabled ? "Fill all the details" : "Login"}
         </button>
+        <button className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition-colors mt-4"
+            onClick={forgotPassword}
+        >
+            Forgot Password</button>
         <Link href="/signup" className="mt-4 text-blue-500 hover:underline">
             Visit Sign Up
         </Link>
