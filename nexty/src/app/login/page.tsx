@@ -36,7 +36,7 @@ export default function LoginPage() {
 
             if (response.status === 200) {
                 toast.success("Welcome back to Loanverse!");
-                router.push(`/profile/${data.username}`);
+                router.push(`/central`);
             } else if (response.status === 401) {
                 toast.error("Invalid email or password.");
             } else {

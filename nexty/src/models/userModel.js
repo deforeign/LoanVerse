@@ -34,7 +34,11 @@ const userSchema = new mongoose.Schema({
     },
     verifyTokenExpiry: {
         type: Date,
-    }
+    },
+    Amount: {
+        type: Number,
+        default: 0,
+    },
 }, { timestamps: true
 
 })
