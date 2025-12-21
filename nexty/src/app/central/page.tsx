@@ -16,6 +16,7 @@ export default function LoanversePoolPage() {
   const [amountLoading, setAmountLoading] = useState(false);
   const [userAmounts, setUserAmounts] = useState<UserAmount[]>([]);
   const [currentUsername, setCurrentUsername] = useState<string>("");
+  const [cibilScore, setCibilScore] = useState(0);
 
   const getAmounts = async () => {
     try {
@@ -47,6 +48,7 @@ export default function LoanversePoolPage() {
       if (!res.ok) return;
       const data = await res.json();
       setCurrentUsername(data.user.username);
+      setCibilScore(data.user.Cibil); // assumes `Cibil` field on user
     } catch (err) {
       console.log("Error fetching current user");
     }
@@ -59,7 +61,29 @@ export default function LoanversePoolPage() {
 
   const handlePostAmount = async () => {
     const amountNumber = Number(myAmount);
+
+    // If CIBIL is 0, user cannot request any amount
+    if (cibilScore === 0) {
+      toast.error("Your CIBIL score is 0, so you cannot request any amount.");
+      return;
+    }
+
     if (!amountNumber) return;
+
+    // CIBIL-based limit logic
+    let maxAllowed = 0;
+    if (cibilScore > 0 && cibilScore < 500) {
+      maxAllowed = 50000;
+    } else if (cibilScore >= 500 && cibilScore < 900) {
+      maxAllowed = 500000;
+    }
+
+    if (maxAllowed > 0 && amountNumber > maxAllowed) {
+      toast.error(
+        `Based on your CIBIL score (${cibilScore}), you can request up to ₹${maxAllowed.toLocaleString()}.`
+      );
+      return;
+    }
 
     try {
       setAmountLoading(true);
@@ -93,13 +117,21 @@ export default function LoanversePoolPage() {
   return (
     <div className="relative min-h-screen bg-gradient-to-br from-emerald-900 via-blue-900 to-indigo-900 flex items-center justify-center p-4">
       {/* Big welcome centered at top */}
-      <div className="absolute top-6 left-0 w-full flex justify-center">
+      <div className="absolute top-21 left-0 w-full flex justify-center">
         <h1 className="text-4xl md:text-5xl font-black text-emerald-100 drop-shadow-lg text-center">
           Welcome back{currentUsername ? `, ${currentUsername}` : ""}!
         </h1>
       </div>
 
-      {/* Logout button at very top-right of screen */}
+      {/* Profile + Logout buttons */}
+      <button
+        className="absolute top-6 right-30 px-4 py-1.5 rounded-full text-xs font-semibold border border-emerald-300/70 text-emerald-50 bg-white/10 backdrop-blur-sm hover:bg-white/20 hover:text-emerald-50 transition-colors duration-300"
+        onClick={() => {
+          router.push("/profile");
+        }}
+      >
+        Profile
+      </button>
       <button
         className="absolute top-6 right-8 px-4 py-1.5 rounded-full text-xs font-semibold border border-emerald-300/70 text-emerald-50 bg-white/10 backdrop-blur-sm hover:bg-white/20 hover:text-emerald-50 transition-colors duration-300"
         onClick={async () => {
@@ -113,8 +145,15 @@ export default function LoanversePoolPage() {
       {/* CENTER CARD */}
       <div className="w-full max-w-xl mt-20 backdrop-blur-xl bg-white/5 border border-white/20 rounded-3xl p-8 shadow-2xl">
         {/* Subheading under big welcome */}
-        <p className="text-sm text-gray-300 mb-8">
+        <p className="text-sm text-gray-300 mb-2">
           Loanverse Pool – live total of all requested amounts by users.
+        </p>
+        <p className="text-xs text-emerald-100 mb-6">
+          Your CIBIL score:{" "}
+          <span className="font-semibold">{cibilScore}</span>
+          {cibilScore === 0 && " – you cannot request any amount."}
+          {cibilScore > 0 && cibilScore < 500 && " – you can request up to ₹50,000."}
+          {cibilScore >= 500 && cibilScore < 900 && " – you can request up to ₹5,00,000."}
         </p>
 
         {/* List of usernames + amounts */}
@@ -157,7 +196,6 @@ export default function LoanversePoolPage() {
             value={myAmount}
             onChange={(e) => {
               const raw = e.target.value;
-              // remove leading zeros like 0700 -> 700, but keep single "0"
               const normalized = raw.replace(/^0+(\d)/, "$1");
               setMyAmount(normalized);
             }}
@@ -165,9 +203,9 @@ export default function LoanversePoolPage() {
           <button
             type="button"
             onClick={handlePostAmount}
-            disabled={amountLoading || !Number(myAmount)}
+            disabled={amountLoading || !Number(myAmount) || cibilScore === 0}
             className={`w-full py-3 rounded-2xl font-semibold text-sm transition-all duration-300 ${
-              amountLoading || !Number(myAmount)
+              amountLoading || !Number(myAmount) || cibilScore === 0
                 ? "bg-gray-700/50 text-gray-400 cursor-not-allowed"
                 : "bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 text-white shadow-lg"
             }`}
