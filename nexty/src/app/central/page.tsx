@@ -12,11 +12,12 @@ type UserAmount = {
 export default function LoanversePoolPage() {
   const router = useRouter();
 
-  const [myAmount, setMyAmount] = useState<string>(""); // string to control display
+  const [myAmount, setMyAmount] = useState<string>(""); // input value
   const [amountLoading, setAmountLoading] = useState(false);
   const [userAmounts, setUserAmounts] = useState<UserAmount[]>([]);
   const [currentUsername, setCurrentUsername] = useState<string>("");
   const [cibilScore, setCibilScore] = useState(0);
+  const [myTotalAmount, setMyTotalAmount] = useState(0); // total already requested by this user
 
   const getAmounts = async () => {
     try {
@@ -47,8 +48,10 @@ export default function LoanversePoolPage() {
       const res = await fetch("/api/users/me");
       if (!res.ok) return;
       const data = await res.json();
+
       setCurrentUsername(data.user.username);
       setCibilScore(data.user.Cibil); // assumes `Cibil` field on user
+      setMyTotalAmount(data.user.Amount ?? 0); // assumes `Amount` is total user-requested amount
     } catch (err) {
       console.log("Error fetching current user");
     }
@@ -59,28 +62,33 @@ export default function LoanversePoolPage() {
     getCurrentUser();
   }, []);
 
+  const computeMaxAllowed = () => {
+    if (cibilScore === 0) return 0;
+    if (cibilScore > 0 && cibilScore < 500) return 50000;
+    if (cibilScore >= 500 && cibilScore < 900) return 500000;
+    // if you want: scores >= 900 can have same 5L or more, adjust here
+    return 500000;
+  };
+
   const handlePostAmount = async () => {
     const amountNumber = Number(myAmount);
 
+    if (!amountNumber) return;
+
+    const maxAllowed = computeMaxAllowed();
+
     // If CIBIL is 0, user cannot request any amount
-    if (cibilScore === 0) {
+    if (maxAllowed === 0) {
       toast.error("Your CIBIL score is 0, so you cannot request any amount.");
       return;
     }
 
-    if (!amountNumber) return;
-
-    // CIBIL-based limit logic
-    let maxAllowed = 0;
-    if (cibilScore > 0 && cibilScore < 500) {
-      maxAllowed = 50000;
-    } else if (cibilScore >= 500 && cibilScore < 900) {
-      maxAllowed = 500000;
-    }
-
-    if (maxAllowed > 0 && amountNumber > maxAllowed) {
+    // Check total (existing + new) against max
+    const newTotal = myTotalAmount + amountNumber;
+    if (newTotal > maxAllowed) {
       toast.error(
-        `Based on your CIBIL score (${cibilScore}), you can request up to ₹${maxAllowed.toLocaleString()}.`
+        `Your total requested amount would be ₹${newTotal.toLocaleString()}, ` +
+          `but based on your CIBIL score (${cibilScore}) you can request up to ₹${maxAllowed.toLocaleString()}.`
       );
       return;
     }
@@ -103,7 +111,23 @@ export default function LoanversePoolPage() {
 
       if (res.ok) {
         toast.success("Amount posted successfully.");
-        await getAmounts();
+
+        // Update my total in state
+        const updatedTotal = myTotalAmount + amountNumber;
+        setMyTotalAmount(updatedTotal);
+
+        // Update central list locally for this user
+        setUserAmounts((prev) => {
+          const exists = prev.some((u) => u.username === currentUsername);
+          if (!exists) {
+            return [...prev, { username: currentUsername, amount: updatedTotal }];
+          }
+          return prev.map((u) =>
+            u.username === currentUsername ? { ...u, amount: updatedTotal } : u
+          );
+        });
+
+        setMyAmount("");
       } else {
         toast.error(data.message || "Failed to post amount.");
       }
@@ -113,6 +137,8 @@ export default function LoanversePoolPage() {
       setAmountLoading(false);
     }
   };
+
+  const maxAllowed = computeMaxAllowed();
 
   return (
     <div className="relative min-h-screen bg-gradient-to-br from-emerald-900 via-blue-900 to-indigo-900 flex items-center justify-center p-4">
@@ -148,12 +174,17 @@ export default function LoanversePoolPage() {
         <p className="text-sm text-gray-300 mb-2">
           Loanverse Pool – live total of all requested amounts by users.
         </p>
-        <p className="text-xs text-emerald-100 mb-6">
+        <p className="text-xs text-emerald-100 mb-2">
           Your CIBIL score:{" "}
           <span className="font-semibold">{cibilScore}</span>
-          {cibilScore === 0 && " – you cannot request any amount."}
-          {cibilScore > 0 && cibilScore < 500 && " – you can request up to ₹50,000."}
-          {cibilScore >= 500 && cibilScore < 900 && " – you can request up to ₹5,00,000."}
+          {maxAllowed === 0 && " – you cannot request any amount."}
+          {maxAllowed === 50000 && " – you can request up to ₹50,000 in total."}
+          {maxAllowed === 500000 &&
+            " – you can request up to ₹5,00,000 in total."}
+        </p>
+        <p className="text-xs text-emerald-100 mb-6">
+          Your total requested amount so far:{" "}
+          <span className="font-semibold">₹ {myTotalAmount.toLocaleString()}</span>
         </p>
 
         {/* List of usernames + amounts */}
@@ -176,7 +207,9 @@ export default function LoanversePoolPage() {
                     User{" "}
                     <span className="text-emerald-300">{ua.username}</span> has
                     requested amount{" "}
-                    <span className="text-emerald-300">₹ {ua.amount}</span>
+                    <span className="text-emerald-300">
+                      ₹ {ua.amount.toLocaleString()}
+                    </span>
                   </p>
                 ))
             )}
@@ -203,9 +236,14 @@ export default function LoanversePoolPage() {
           <button
             type="button"
             onClick={handlePostAmount}
-            disabled={amountLoading || !Number(myAmount) || cibilScore === 0}
+            disabled={
+              amountLoading || !Number(myAmount) || cibilScore === 0 || maxAllowed === 0
+            }
             className={`w-full py-3 rounded-2xl font-semibold text-sm transition-all duration-300 ${
-              amountLoading || !Number(myAmount) || cibilScore === 0
+              amountLoading ||
+              !Number(myAmount) ||
+              cibilScore === 0 ||
+              maxAllowed === 0
                 ? "bg-gray-700/50 text-gray-400 cursor-not-allowed"
                 : "bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 text-white shadow-lg"
             }`}
